@@ -91,7 +91,7 @@ async def message_handler(client, topic, payload, qos, properties):
                         "flextraff/green_times", 
                         green_times_payload,
                         qos=1,
-                        retain=True
+                        retain=False
                     )
                     
                     print(f"📡 Published green times to Pi on topic: flextraff/green_times")
