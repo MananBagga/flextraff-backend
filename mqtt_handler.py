@@ -70,7 +70,7 @@ async def message_handler(client, topic, payload, qos, properties):
         async with httpx.AsyncClient(timeout=30.0) as http_client:
             try:
                 response = await http_client.post(
-                    "http://localhost:8001/calculate-timing",
+                    "https://flextraff-backend.onrender.com/calculate-timing",
                     json=data
                 )
                 
@@ -85,7 +85,8 @@ async def message_handler(client, topic, payload, qos, properties):
                     green_times_payload = json.dumps({
                         "green_times": result.get("green_times"),
                         "cycle_time": result.get("cycle_time"),
-                        "junction_id": junction_id
+                        "junction_id": junction_id,
+                        "cycle_id": data.get("cycle_id")
                     })
                     
                     mqtt.client.publish(
@@ -104,7 +105,7 @@ async def message_handler(client, topic, payload, qos, properties):
             except httpx.TimeoutException:
                 print("❌ FastAPI request timed out after 30 seconds")
             except httpx.ConnectError:
-                print("❌ Could not connect to FastAPI at http://localhost:8001")
+                print("❌ Could not connect to FastAPI at https://flextraff-backend.onrender.com")
             except Exception as e:
                 print(f"❌ Error calling FastAPI: {type(e).__name__}: {e}")
 
