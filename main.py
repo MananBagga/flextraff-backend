@@ -68,8 +68,10 @@ async def startup_event():
         # Initialize database and calculator
         db_service = DatabaseService()
         await db_service.log_system_event(
-        message="FlexTraff backend started",
-        component="startup")
+            message="FlexTraff backend started successfully",
+            log_level="INFO",
+            component="startup"
+        )
 
         traffic_calculator = TrafficCalculator(db_service=db_service)
 
@@ -79,9 +81,24 @@ async def startup_event():
             logger.info("✅ Database connection established")
         else:
             logger.error(f"❌ Database connection failed: {health.get('error')}")
+            await db_service.log_system_error(
+                error_message=f"Database connection failed: {health.get('error')}",
+                error_type="STARTUP_DB_ERROR",
+                component="startup"
+            )
 
     except Exception as e:
         logger.error(f"❌ Startup failed: {str(e)}")
+        try:
+            # Try to log the error if db_service was initialized
+            if db_service:
+                await db_service.log_system_error(
+                    error_message=str(e),
+                    error_type="STARTUP_FAILURE",
+                    component="startup"
+                )
+        except:
+            pass  # If logging fails, don't crash startup
         raise
 
     # Wait for MQTT to connect
@@ -98,8 +115,39 @@ async def startup_event():
         print("✅ MQTT subscription confirmed")
         print("🎧 Ready to receive car count data from Raspberry Pi")
         print("=" * 60 + "\n")
+        
+        await db_service.log_system_event(
+            message="MQTT subscription active and listening for car count data",
+            log_level="INFO",
+            component="mqtt_startup"
+        )
     except Exception as e:
         print(f"⚠️ MQTT subscription warning: {e}")
+        try:
+            await db_service.log_system_error(
+                error_message=f"MQTT subscription failed: {str(e)}",
+                error_type="MQTT_SUBSCRIPTION_ERROR",
+                component="mqtt_startup"
+            )
+        except:
+            pass  # If logging fails, don't crash startup
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Handle graceful shutdown and log system closure"""
+    global db_service
+    logger.info("🛑 FlexTraff ATCS API shutting down...")
+    
+    try:
+        if db_service:
+            await db_service.log_system_event(
+                message="FlexTraff backend shutdown gracefully",
+                log_level="INFO",
+                component="shutdown"
+            )
+    except Exception as e:
+        logger.error(f"⚠️ Warning during shutdown logging: {e}")
 
 
 # Dependency to get database service
