@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from datetime import date, datetime, timedelta
@@ -35,7 +36,7 @@ class DatabaseService:
         self.logger.info("✅ DatabaseService initialized")
 
     # ------------------------------------------------------------------
-    # 🔥 SYSTEM LOGGING (NEW)
+    # 🔥 SYSTEM LOGGING (SAFE + ASYNC FIXED)
     # ------------------------------------------------------------------
 
     async def log_system_event(
@@ -51,14 +52,17 @@ class DatabaseService:
         """
         try:
             log_data = {
-                "timestamp": datetime.utcnow().isoformat(),
                 "log_level": log_level,
                 "component": component,
                 "message": message,
                 "junction_id": junction_id,
             }
 
-            self.supabase.table("system_logs").insert(log_data).execute()
+            await asyncio.to_thread(
+                lambda: self.supabase.table("system_logs")
+                .insert(log_data)
+                .execute()
+            )
 
         except Exception as e:
             # Logging should never crash the system
@@ -81,12 +85,11 @@ class DatabaseService:
                 "lane_number": lane_number,
                 "fastag_id": fastag_id,
                 "vehicle_type": vehicle_type,
-                "detection_timestamp": datetime.utcnow().isoformat(),
                 "processing_status": "processed",
             }
 
-            result = (
-                self.supabase.table("vehicle_detections")
+            result = await asyncio.to_thread(
+                lambda: self.supabase.table("vehicle_detections")
                 .insert(detection_data)
                 .execute()
             )
@@ -95,7 +98,7 @@ class DatabaseService:
                 raise Exception("No data returned from insert")
 
             await self.log_system_event(
-                message=f"Vehicle detected: FASTag={fastag_id}, lane={lane_number}",
+                message=f"Vehicle detected | FASTag={fastag_id} | lane={lane_number}",
                 component="vehicle_detection",
                 junction_id=junction_id,
             )
@@ -126,7 +129,6 @@ class DatabaseService:
         try:
             cycle_data = {
                 "junction_id": junction_id,
-                "cycle_start_time": datetime.utcnow().isoformat(),
                 "total_cycle_time": cycle_time,
                 "lane_1_green_time": green_times[0],
                 "lane_2_green_time": green_times[1],
@@ -141,8 +143,8 @@ class DatabaseService:
                 "calculation_time_ms": calculation_time_ms,
             }
 
-            result = (
-                self.supabase.table("traffic_cycles")
+            result = await asyncio.to_thread(
+                lambda: self.supabase.table("traffic_cycles")
                 .insert(cycle_data)
                 .execute()
             )
@@ -151,7 +153,10 @@ class DatabaseService:
                 raise Exception("No data returned from insert")
 
             await self.log_system_event(
-                message=f"Traffic cycle calculated | cycle={cycle_time}s | vehicles={sum(lane_counts)}",
+                message=(
+                    f"Traffic cycle calculated | "
+                    f"cycle={cycle_time}s | vehicles={sum(lane_counts)}"
+                ),
                 component="traffic_calculator",
                 junction_id=junction_id,
             )
@@ -179,8 +184,8 @@ class DatabaseService:
                 datetime.utcnow() - timedelta(minutes=time_window_minutes)
             ).isoformat()
 
-            result = (
-                self.supabase.table("vehicle_detections")
+            result = await asyncio.to_thread(
+                lambda: self.supabase.table("vehicle_detections")
                 .select("lane_number")
                 .eq("junction_id", junction_id)
                 .gte("detection_timestamp", time_threshold)
@@ -220,8 +225,8 @@ class DatabaseService:
             start = target_date.isoformat()
             end = (target_date + timedelta(days=1)).isoformat()
 
-            result = (
-                self.supabase.table("vehicle_detections")
+            result = await asyncio.to_thread(
+                lambda: self.supabase.table("vehicle_detections")
                 .select("id", count="exact")
                 .eq("junction_id", junction_id)
                 .gte("detection_timestamp", start)
@@ -244,8 +249,8 @@ class DatabaseService:
         self, junction_id: int
     ) -> Optional[Dict[str, Any]]:
         try:
-            result = (
-                self.supabase.table("traffic_cycles")
+            result = await asyncio.to_thread(
+                lambda: self.supabase.table("traffic_cycles")
                 .select("*")
                 .eq("junction_id", junction_id)
                 .order("cycle_start_time", desc=True)
@@ -266,8 +271,8 @@ class DatabaseService:
 
     async def get_all_junctions(self) -> List[Dict[str, Any]]:
         try:
-            result = (
-                self.supabase.table("traffic_junctions")
+            result = await asyncio.to_thread(
+                lambda: self.supabase.table("traffic_junctions")
                 .select("*")
                 .eq("status", "active")
                 .order("junction_name")
@@ -290,7 +295,12 @@ class DatabaseService:
 
     async def health_check(self) -> Dict[str, Any]:
         try:
-            self.supabase.table("traffic_junctions").select("id").limit(1).execute()
+            await asyncio.to_thread(
+                lambda: self.supabase.table("traffic_junctions")
+                .select("id")
+                .limit(1)
+                .execute()
+            )
 
             return {
                 "database_connected": True,
