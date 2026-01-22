@@ -136,7 +136,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Handle graceful shutdown and log system closure"""
-    global _db_service
+    # global _db_service
     logger.info("🛑 FlexTraff ATCS API shutting down...")
     
     try:
