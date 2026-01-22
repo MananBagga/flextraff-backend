@@ -54,34 +54,34 @@ app.add_middleware(
 )
 
 # Global services
-db_service = None
-traffic_calculator = None
+_db_service = None
+_traffic_calculator = None
 
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    global db_service, traffic_calculator
+    global _db_service, _traffic_calculator
     logger.info("🚀 Starting FlexTraff ATCS API...")
 
     try:
         # Initialize database and calculator
-        db_service = DatabaseService()
-        await db_service.log_system_event(
+        _db_service = DatabaseService()
+        await _db_service.log_system_event(
             message="FlexTraff backend started successfully",
             log_level="INFO",
             component="startup"
         )
 
-        traffic_calculator = TrafficCalculator(db_service=db_service)
+        _traffic_calculator = TrafficCalculator(db_service=_db_service)
 
         # Test database connection
-        health = await db_service.health_check()
+        health = await _db_service.health_check()
         if health["database_connected"]:
             logger.info("✅ Database connection established")
         else:
             logger.error(f"❌ Database connection failed: {health.get('error')}")
-            await db_service.log_system_error(
+            await _db_service.log_system_error(
                 error_message=f"Database connection failed: {health.get('error')}",
                 error_type="STARTUP_DB_ERROR",
                 component="startup"
@@ -90,9 +90,9 @@ async def startup_event():
     except Exception as e:
         logger.error(f"❌ Startup failed: {str(e)}")
         try:
-            # Try to log the error if db_service was initialized
-            if db_service:
-                await db_service.log_system_error(
+            # Try to log the error if _db_service was initialized
+            if _db_service:
+                await _db_service.log_system_error(
                     error_message=str(e),
                     error_type="STARTUP_FAILURE",
                     component="startup"
@@ -116,7 +116,7 @@ async def startup_event():
         print("🎧 Ready to receive car count data from Raspberry Pi")
         print("=" * 60 + "\n")
         
-        await db_service.log_system_event(
+        await _db_service.log_system_event(
             message="MQTT subscription active and listening for car count data",
             log_level="INFO",
             component="mqtt_startup"
@@ -124,7 +124,7 @@ async def startup_event():
     except Exception as e:
         print(f"⚠️ MQTT subscription warning: {e}")
         try:
-            await db_service.log_system_error(
+            await _db_service.log_system_error(
                 error_message=f"MQTT subscription failed: {str(e)}",
                 error_type="MQTT_SUBSCRIPTION_ERROR",
                 component="mqtt_startup"
@@ -136,12 +136,12 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Handle graceful shutdown and log system closure"""
-    global db_service
+    global _db_service
     logger.info("🛑 FlexTraff ATCS API shutting down...")
     
     try:
-        if db_service:
-            await db_service.log_system_event(
+        if _db_service:
+            await _db_service.log_system_event(
                 message="FlexTraff backend shutdown gracefully",
                 log_level="INFO",
                 component="shutdown"
@@ -152,18 +152,18 @@ async def shutdown_event():
 
 # Dependency to get database service
 async def get_db_service() -> DatabaseService:
-    if db_service is None:
+    if _db_service is None:
         raise HTTPException(status_code=500, detail="Database service not initialized")
-    return db_service
+    return _db_service
 
 
 # Dependency to get traffic calculator
 async def get_traffic_calculator() -> TrafficCalculator:
-    if traffic_calculator is None:
+    if _traffic_calculator is None:
         raise HTTPException(
             status_code=500, detail="Traffic calculator not initialized"
         )
-    return traffic_calculator
+    return _traffic_calculator
 
 
 # Pydantic models for API requests/responses
