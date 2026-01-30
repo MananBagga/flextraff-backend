@@ -86,8 +86,6 @@ async def message_handler(client, topic, payload, qos, properties):
                     "west": lane_counts[3] if len(lane_counts) > 3 else 0,
                 }
                 
-                # Get the latest traffic cycle ID to link with RFID log
-                # (Note: You may need to pass the actual traffic_cycles table ID)
                 await db_service.log_rfid_scanner_data(
                     junction_id=junction_id,
                     cycle_id=cycle_id,
@@ -103,78 +101,57 @@ async def message_handler(client, topic, payload, qos, properties):
                     junction_id=junction_id,
                 )
 
-        # Call FastAPI endpoint to calculate timing
-        print("\n📤 Calling FastAPI /calculate-timing endpoint...")
+        # Calculate timing directly using TrafficCalculator 
+        print("\n📊 Calculating green times using TrafficCalculator...")
         
-        async with httpx.AsyncClient(timeout=30.0) as http_client:
-            try:
-                response = await http_client.post(
-                    "https://flextraff-backend.onrender.com/calculate-timing",
-                    json=data
-                )
-                
-                print(f"📊 FastAPI Response Status: {response.status_code}")
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    print(f"✅ Calculated green times: {result.get('green_times')}")
-                    print(f"⏱️  Total cycle time: {result.get('cycle_time')}s")
-                    
-                    # Publish green times back to Pi
-                    green_times_payload = json.dumps({
-                        "green_times": result.get("green_times"),
-                        "cycle_time": result.get("cycle_time"),
-                        "junction_id": junction_id,
-                        "cycle_id": cycle_id
-                    })
-                    
-                    mqtt.client.publish(
-                        "flextraff/green_times", 
-                        green_times_payload,
-                        qos=1,
-                        retain=False
-                    )
-                    
-                    print(f"📡 Published green times to Pi on topic: flextraff/green_times")
-                    print(f"✅ MQTT message processing complete\n")
-                    
-                else:
-                    error_msg = f"FastAPI returned error {response.status_code}: {response.text}"
-                    print(f"❌ {error_msg}")
-                    await db_service.log_system_error(
-                        error_message=error_msg,
-                        error_type="FASTAPI_ERROR",
-                        component="mqtt_handler",
-                        junction_id=junction_id,
-                    )
-                    
-            except httpx.TimeoutException as e:
-                error_msg = "FastAPI request timed out after 30 seconds"
-                print(f"❌ {error_msg}")
-                await db_service.log_system_error(
-                    error_message=error_msg,
-                    error_type="FASTAPI_TIMEOUT",
-                    component="mqtt_handler",
-                    junction_id=junction_id,
-                )
-            except httpx.ConnectError as e:
-                error_msg = "Could not connect to FastAPI at https://flextraff-backend.onrender.com"
-                print(f"❌ {error_msg}")
-                await db_service.log_system_error(
-                    error_message=error_msg,
-                    error_type="FASTAPI_CONNECT_ERROR",
-                    component="mqtt_handler",
-                    junction_id=junction_id,
-                )
-            except Exception as e:
-                error_msg = f"Error calling FastAPI: {type(e).__name__}: {e}"
-                print(f"❌ {error_msg}")
-                await db_service.log_system_error(
-                    error_message=str(e),
-                    error_type="FASTAPI_EXCEPTION",
-                    component="mqtt_handler",
-                    junction_id=junction_id,
-                )
+        try:
+            # Create calculator instance
+            from app.services.traffic_calculator import TrafficCalculator
+            calculator = TrafficCalculator(db_service=db_service)
+            
+            # Calculate green times directly
+            green_times, cycle_time = await calculator.calculate_green_times(
+                lane_counts, 
+                junction_id=junction_id
+            )
+            
+            print(f"✅ Calculated green times: {green_times}")
+            print(f"⏱️  Total cycle time: {cycle_time}s")
+            
+            # Log the calculation event
+            await db_service.log_system_event(
+                message=f"Traffic calculated for lanes {lane_counts}",
+                component="mqtt_handler",
+                junction_id=junction_id,
+            )
+            
+            # Publish green times back to Pi
+            green_times_payload = json.dumps({
+                "green_times": green_times,
+                "cycle_time": cycle_time,
+                "junction_id": junction_id,
+                "cycle_id": cycle_id
+            })
+            
+            mqtt.client.publish(
+                "flextraff/green_times", 
+                green_times_payload,
+                qos=1,
+                retain=False
+            )
+            
+            print(f"📡 Published green times to Pi on topic: flextraff/green_times")
+            print(f"✅ MQTT message processing complete\n")
+            
+        except Exception as e:
+            error_msg = f"Traffic calculation error: {type(e).__name__}: {e}"
+            print(f"❌ {error_msg}")
+            await db_service.log_system_error(
+                error_message=str(e),
+                error_type="CALCULATION_ERROR",
+                component="mqtt_handler",
+                junction_id=junction_id,
+            )
 
     except json.JSONDecodeError as e:
         error_msg = f"Failed to decode JSON payload: {e}"
