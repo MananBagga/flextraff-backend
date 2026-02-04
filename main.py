@@ -408,10 +408,12 @@ async def get_live_timing(
         return {
             "junction_id": junction_id,
             "current_lane_counts": lane_counts,
-            "recommended_green_times": green_times,
+            "recommended_green_times": green_times, #Probably not needed
             "total_cycle_time": cycle_time,
-            "time_window_minutes": time_window,
+            "time_window_minutes": time_window, #Probably not needed
             "algorithm_info": calculator.get_algorithm_info(),
+
+            # Need green times later for frontend visual Integration of all lanes with green and red times
         }
 
     except Exception as e:
@@ -421,7 +423,7 @@ async def get_live_timing(
         )
 
 
-@app.get("/junction/{junction_id}/history")
+@app.get("/junction/{junction_id}/history") #The return values and the values to be inserted in the db seems incorrect
 async def get_junction_history(
     junction_id: int, limit: int = 10, db: DatabaseService = Depends(get_db_service)
 ):
